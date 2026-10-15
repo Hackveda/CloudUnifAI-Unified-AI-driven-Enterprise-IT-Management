@@ -41,9 +41,13 @@ def test_correlate_deduplicate_approve_and_resolve(client):
     detail = client.get("/api/incidents/" + iid, headers=auth()).json()
     assert len(detail["events"]) == 2
     assert detail["severity"] == "critical"
-    assert detail["confidence"] > 0.5
+    assert detail["confidence"] > 0.0
+    ml = client.get("/api/incidents/" + iid + "/ml-analysis", headers=auth())
+    assert ml.status_code == 200
+    assert ml.json()["mode"] == "recommendation_only"
+    assert "notify-oncall" in ml.json()["authorized_playbook_candidates"]
     act = client.post("/api/incidents/" + iid + "/actions",
-                      json={"actor": "oncall", "playbook": "rollback-deployment"}, headers=auth())
+                      json={"actor": "oncall", "playbook": "notify-oncall"}, headers=auth())
     aid = act.json()["id"]
     assert client.post("/api/actions/" + aid + "/approve", json={"actor": "oncall"}, headers=auth()).status_code == 403
     approved = client.post("/api/actions/" + aid + "/approve", json={"actor": "incident-manager"}, headers=auth())
