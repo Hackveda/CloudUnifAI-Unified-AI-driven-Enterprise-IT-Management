@@ -1,0 +1,13 @@
+services:
+  cloudunifai:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      CLOUDUNIFAI_DB: /data/cloudunifai.db
+      CLOUDUNIFAI_API_KEY: ${CLOUDUNIFAI_API_KEY:?Set CLOUDUNIFAI_API_KEY in .env}
+    volumes:
+      - cloudunifai-data:/data
+    restart: unless-stopped
+volumes:
+  cloudunifai-data:
