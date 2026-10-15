@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CloudUnifAI | Unified IT Intelligence</title>
+<style>
+:root{font-family:Inter,ui-sans-serif,system-ui,Arial,sans-serif;color:#eaf3ff;background:#08101d;font-synthesis:none}
+*{box-sizing:border-box}body{margin:0}button,input,select{font:inherit}button{cursor:pointer}
+header{border-bottom:1px solid #23354e;padding:20px 4%;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;background:#101e30}
+.brand{font-weight:850;font-size:24px;letter-spacing:-.7px}.brand span{color:#5aafff}.tag{background:#173c44;color:#70dfcb;padding:7px 12px;border-radius:999px;font-size:12px;font-weight:700}
+main{max-width:1380px;padding:26px 20px;margin:auto}h1{margin:0 0 7px;font-size:clamp(28px,3vw,42px);letter-spacing:-1.2px}p{color:#91a8c2;margin:5px 0 20px}.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:20px 0}
+button{background:#2384fa;color:#fff;border:0;border-radius:10px;padding:11px 15px;font-weight:700}
+button:hover{filter:brightness(1.13)}button.secondary{background:#1d2e44}button.danger{background:#a0494b}
+input,select{background:#0b1626;border:1px solid #38506c;color:#fff;padding:11px;border-radius:10px;min-width:0}
+input{flex:1 1 200px} .cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin:16px 0 24px}
+.card,.panel{background:#101e30;border:1px solid #21364e;border-radius:16px;padding:20px;min-width:0}
+.card b{display:block;font-size:34px;margin-top:14px}.muted{color:#91a8c2;font-size:13px}.grid{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(300px,1fr);gap:16px}
+h2{font-size:18px;margin:0 0 16px}h3{font-size:15px;color:#dce9ff}.item{border:1px solid #273d57;border-radius:12px;padding:14px;margin:10px 0;background:#0a1728;cursor:pointer}
+.item:hover{border-color:#328efd}.line{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}
+.sev{font-size:11px;text-transform:uppercase;font-weight:800;padding:5px 9px;border-radius:99px}
+.critical{background:#5a2230;color:#ffb0ba}.high{background:#5d3a19;color:#ffd08e}.medium{background:#273f60;color:#b6d3ff}.low{background:#19534c;color:#a7f3da}
+small{color:#9db1c7}.status{background:#173343;color:#a7dffc;padding:5px 9px;border-radius:7px;font-size:12px}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;color:#afc2d9;background:#091525;padding:12px;border-radius:8px;max-height:170px;overflow:auto}
+#detail .item{cursor:default}.empty{padding:20px;color:#91a8c2;text-align:center}#toast{min-height:24px;color:#75d7b1;margin-top:8px;overflow-wrap:anywhere}
+@media(max-width:900px){.cards{grid-template-columns:repeat(2,minmax(0,1fr))}.grid{grid-template-columns:1fr}}
+@media(max-width:480px){.cards{gap:9px}.card,.panel{padding:14px}.card b{font-size:27px}.toolbar>*{width:100%}header{padding:16px}main{padding:20px 12px}}
+</style></head>
+<body><header><div class="brand">Cloud<span>UnifAI</span></div><div class="tag">● SAFE SIMULATION MODE · NO REAL CLOUD ACTIONS</div></header>
+<main><h1>Unified IT Intelligence</h1><p>Connect context. Diagnose incidents. Approve safe, simulated remediation.</p>
+<section class="toolbar"><input id="key" type="password" placeholder="Enter API key (stored only in this browser tab)" autocomplete="off">
+<button id="connect">Connect</button><button id="demo">Generate incident scenario</button><button id="refresh" class="secondary">Refresh</button></section>
+<div id="toast" aria-live="polite"></div>
+<section class="cards"><div class="card"><div class="muted">Open incidents</div><b id="open">—</b></div><div class="card"><div class="muted">Resolved incidents</div><b id="resolved">—</b></div><div class="card"><div class="muted">Events ingested</div><b id="events">—</b></div><div class="card"><div class="muted">Cost anomaly signals</div><b id="costs">—</b></div></section>
+<div class="grid"><section class="panel"><div class="line"><h2>Correlated incidents</h2><select id="filter"><option value="all">All</option><option value="open">Open</option><option value="resolved">Resolved</option></select></div><div id="incidents" class="empty">Enter your API key to load incidents</div></section>
+<section class="panel"><h2>Incident investigation</h2><div id="detail" class="empty">Choose an incident to see root causes, evidence and remediation controls.</div></section></div>
+<div class="grid" style="margin-top:16px"><section class="panel"><h2>Connected source signals</h2><div id="sources" class="empty">No data yet</div></section><section class="panel"><h2>Audit trail</h2><div id="audit" class="empty">No data yet</div></section></div>
+</main><script>
+const $=id=>document.getElementById(id),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let apiKey='',current='';
+function note(t,fail=false){$('toast').textContent=t;$('toast').style.color=fail?'#ff999e':'#75d7b1'}
+async function api(url,opt={}){if(!apiKey)throw Error('Enter API key first');const r=await fetch(url,{...opt,headers:{'X-API-Key':apiKey,...(opt.body?{'Content-Type':'application/json'}:{})}});let x=await r.json().catch(()=>({detail:'Invalid server response'}));if(!r.ok)throw Error(typeof x.detail==='string'?x.detail:JSON.stringify(x.detail));return x}
+const post=(url,data={})=>api(url,{method:'POST',body:JSON.stringify(data)});
+const dt=v=>new Date(v).toLocaleString();
+async function load(){
+ try{
+ const [overview,incidents,audits]=await Promise.all([api('/api/overview'),api('/api/incidents?status='+$('filter').value),api('/api/audit?limit=12')]);
+ $('open').textContent=overview.open;$('resolved').textContent=overview.resolved;$('events').textContent=overview.total_events;
+ $('costs').textContent=overview.finops_signals.reduce((n,v)=>n+v.anomaly_events,0);
+ $('incidents').innerHTML=incidents.length?incidents.map(x=>'<div class="item" data-id="'+esc(x.id)+'"><div class="line"><b>'+esc(x.service)+'</b><span class="sev '+esc(x.severity)+'">'+esc(x.severity)+'</span></div><div class="muted" style="margin:8px 0">'+esc(x.summary)+'</div><div class="line"><small>'+esc(dt(x.updated_at))+'</small><span class="status">'+esc(x.status)+'</span></div></div>').join(''):'<div class="empty">No incidents yet. Generate a scenario to start.</div>';
+ document.querySelectorAll('#incidents [data-id]').forEach(el=>el.onclick=()=>detail(el.dataset.id));
+ $('sources').innerHTML=overview.sources.length?overview.sources.map(s=>'<div class="line item"><b>'+esc(s.source)+'</b><span>'+s.events+' events</span></div>').join(''):'<div class="empty">No signals yet</div>';
+ $('audit').innerHTML=audits.length?audits.map(a=>'<div class="item"><b>'+esc(a.action)+'</b><div class="muted">'+esc(a.actor)+' · '+esc(dt(a.at))+'</div></div>').join(''):'<div class="empty">No audit records yet</div>';
+ if(current)await detail(current);
+ note('Connected · simulation mode');
+ }catch(e){note(e.message,true)}
+}
+async function detail(id){
+ current=id;try{let [x,r]=await Promise.all([api('/api/incidents/'+id),api('/api/incidents/'+id+'/recommendations')]);
+ $('detail').innerHTML='<div class="line"><strong>'+esc(x.service)+'</strong><span class="sev '+esc(x.severity)+'">'+esc(x.severity)+'</span></div>'+
+ '<h3>Probable root cause</h3><p>'+esc(x.root_cause)+'</p><div class="muted">Confidence: '+Math.round(x.confidence*100)+'% · heuristic, not ML prediction</div>'+
+ '<h3>Recommended playbooks</h3>'+r.recommendations.map(p=>'<div class="item"><b>'+esc(p.playbook)+'</b><p>'+esc(p.reason)+' · '+esc(p.risk)+' risk</p><button data-play="'+esc(p.playbook)+'">Request approval</button></div>').join('')+
+ '<h3>Evidence ('+x.events.length+')</h3>'+x.events.map(e=>'<div class="item"><b>'+esc(e.kind)+' · '+esc(e.source)+'</b><p>'+esc(e.message)+'</p><small>'+esc(dt(e.occurred_at))+'</small></div>').join('')+
+ '<h3>Remediation actions</h3>'+(x.actions.length?x.actions.map(a=>'<div class="item"><b>'+esc(a.playbook)+'</b><p>'+esc(a.status)+' — requested by '+esc(a.requested_by)+'</p>'+(a.status==='pending_approval'?'<button data-approve="'+esc(a.id)+'">Approve as separate operator</button>':'<small>'+esc(a.outcome||'')+'</small>')+'</div>').join(''):'<p>No actions requested</p>')+
+ (x.status==='open'?'<button class="secondary" id="resolve">Mark resolved</button>':'');
+ document.querySelectorAll('[data-play]').forEach(el=>el.onclick=async()=>{let actor=prompt('Requesting operator ID:');if(!actor)return;await safe(async()=>{await post('/api/incidents/'+id+'/actions',{actor,playbook:el.dataset.play});await load()})});
+ document.querySelectorAll('[data-approve]').forEach(el=>el.onclick=async()=>{let actor=prompt('Approving operator ID (must differ from requester):');if(!actor)return;await safe(async()=>{await post('/api/actions/'+el.dataset.approve+'/approve',{actor});await load()})});
+ if($('resolve'))$('resolve').onclick=async()=>{let actor=prompt('Operator ID resolving incident:');if(!actor)return;await safe(async()=>{await post('/api/incidents/'+id+'/resolve',{actor});await load()})};
+ }catch(e){note(e.message,true)}
+}
+async function safe(fn){try{await fn()}catch(e){note(e.message,true)}}
+$('connect').onclick=()=>{apiKey=$('key').value.trim();$('key').value='';load()};
+$('demo').onclick=()=>safe(async()=>{let x=await post('/api/demo');current=x.incident_id;await load();note('Synthetic incident generated (no cloud resources touched)')});
+$('refresh').onclick=load;$('filter').onchange=load;
+</script></body></html>
