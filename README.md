@@ -105,3 +105,21 @@ Pilot KPIs to measure: MTTD, MTTR, alert compression per incident, precision of 
 3. Add anomaly detection and supervised RCA models with evaluation, drift monitoring and model registry.
 4. Add real SSO/RBAC, approval attestations, isolated execution worker, policy engine, canary checks, rollback and tamper-evident audit.
 5. Add production FinOps ingestion, spend forecasts, SLA metrics, OTel traces, dashboards and load/chaos tests.
+
+
+## Evidence-ranked RCA pipeline (Phase 2)
+
+The `GET /api/incidents/{incident_id}/ml-analysis` endpoint returns ranked candidate causes, feature values, supporting event IDs, model version, unknown/abstention flag and independently constrained playbook candidates. It is **not** a calibrated causal inference model. Until verified training data is supplied, the service runs a deterministic, evidence-aware baseline without external ML dependencies. Unsupported playbook requests return HTTP 403; all approved actions still execute in simulation mode only.
+
+### Optional offline training
+
+Provide a reviewed JSONL file of **at least 20 real, adjudicated historical incident examples**, each with `events` in the same shape returned by incident details and `root_cause` drawn from: `deployment_regression`, `connection_pool_exhaustion`, `resource_saturation`, `network_failure`, `cost_anomaly`. All five labels must be represented. No example production labels or synthetic accuracy claims are shipped.
+
+```bash
+pip install scikit-learn numpy
+python -m pipelines.train --input /path/to/reviewed_incidents.jsonl --output /tmp/rca-model.json
+```
+
+The training output is a human-inspectable JSON linear model, avoiding unsafe unpickling. Copy it into the mounted data volume only **after** offline time-based holdout evaluation and change approval. Set `CLOUDUNIFAI_MODEL_PATH=/data/rca-model.json`, then restart the service to use this model. Rankings are uncalibrated and are not guaranteed correct; without a model file the rules baseline is used. Model loading is currently per-request, suitable for a pilot but not a high-throughput serving design.
+
+**Next production milestones:** tenant isolation, bounded event-time correlation windows, alert-pair supervised classifier, labeled RCA evaluation, model promotion gates, centralized RBAC/approval identity, topology graph, streaming jobs and real read-only integrations. The existing shared API key and free-form actor IDs are *not* enterprise-grade authentication.
