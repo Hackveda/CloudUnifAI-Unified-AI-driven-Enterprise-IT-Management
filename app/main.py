@@ -18,6 +18,7 @@ from typing import Literal
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
+from app.ml.pipeline import rank, allowed_playbooks
 
 APP_DIR = Path(__file__).resolve().parent
 DB = os.getenv("CLOUDUNIFAI_DB", "/tmp/cloudunifai.db")
@@ -174,7 +175,11 @@ def ingest(event: EventInput):
                    (event_id, dedupe, event.source, event.service, event.kind, event.severity,
                     event.message, json.dumps(event.attributes), occurred, now, incident_id))
         evs = [dict(e) for e in db.execute("SELECT * FROM events WHERE incident_id=?", (incident_id,))]
-        root, confidence = summarize(evs)
+        prediction = rank(evs)
+        if prediction["unknown"]:
+            root, confidence = summarize(evs)
+        else:
+            root, confidence = prediction["causes"][0]["cause"].replace("_", " "), prediction["causes"][0]["score"]
         highest = max(evs, key=lambda e: SEVERITIES[e["severity"]])["severity"]
         db.execute("UPDATE incidents SET severity=?,root_cause=?,confidence=?,updated_at=? WHERE id=?",
                    (highest, root, confidence, now, incident_id))
@@ -228,6 +233,17 @@ def recommendations(incident_id: str):
             "confidence": incident["confidence"], "recommendations": options}
 
 
+@app.get("/api/incidents/{incident_id}/ml-analysis", dependencies=[Depends(authorized)])
+def ml_analysis(incident_id: str):
+    with connection() as db:
+        incident = incident_view(db, incident_id)
+    prediction = rank(incident["events"])
+    prediction["incident_id"] = incident_id
+    prediction["authorized_playbook_candidates"] = allowed_playbooks(prediction)
+    prediction["execution"] = "disabled_until_independent_human_approval"
+    return prediction
+
+
 @app.post("/api/incidents/{incident_id}/actions", dependencies=[Depends(authorized)], status_code=201)
 def request_action(incident_id: str, req: ActionRequest):
     with connection() as db:
@@ -237,6 +253,10 @@ def request_action(incident_id: str, req: ActionRequest):
             raise HTTPException(404, "Incident not found")
         if incident["status"] != "open":
             raise HTTPException(409, "Incident is resolved")
+        evidence = [dict(e) for e in db.execute("SELECT * FROM events WHERE incident_id=?", (incident_id,))]
+        permission = allowed_playbooks(rank(evidence))
+        if req.playbook not in permission:
+            raise HTTPException(403, "Playbook not allowed by evidence policy")
         aid, now = str(uuid.uuid4()), utcnow()
         db.execute("INSERT INTO actions (id,incident_id,playbook,status,requested_by,created_at,updated_at) VALUES (?,?,?,?,?,?,?)",
                    (aid, incident_id, req.playbook, "pending_approval", req.actor, now, now))
